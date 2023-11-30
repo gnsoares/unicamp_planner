@@ -4,6 +4,12 @@ use std::fmt;
 use time::{Date, Month};
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct Subject {
+    pub code: &'static str,
+    pub institute: &'static str,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Semester {
     pub year: u16,
     pub semester: u8,
@@ -52,6 +58,16 @@ impl From<Date> for Semester {
     }
 }
 
+impl From<&str> for Semester {
+    fn from(s: &str) -> Self {
+        let mut ss = s.split('s');
+        Semester {
+            semester: ss.next().unwrap().parse().unwrap(),
+            year: ss.next().unwrap().parse().unwrap(),
+        }
+    }
+}
+
 impl fmt::Display for Semester {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}s{}", self.semester, self.year)
@@ -59,7 +75,10 @@ impl fmt::Display for Semester {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Timesheet(pub HashMap<String, Vec<Class>>);
+pub struct Timesheet<'a> {
+    #[serde(borrow)]
+    pub table: HashMap<&'a str, Vec<Class>>,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Class(pub Vec<Slot>);
@@ -99,145 +118,28 @@ impl Slot {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Schedule(pub [[String; 7]; 15]);
-impl From<&HashMap<String, Class>> for Schedule {
-    fn from(value: &HashMap<String, Class>) -> Self {
-        let mut arr: [[String; 7]; 15] = [
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
-            [
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-                String::from(""),
-            ],
+pub struct Schedule<'a> {
+    #[serde(borrow)]
+    pub table: [[&'a str; 7]; 15],
+}
+impl<'a> From<&HashMap<&'a str, Class>> for Schedule<'a> {
+    fn from(value: &HashMap<&'a str, Class>) -> Self {
+        let mut table: [[&str; 7]; 15] = [
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
+            ["", "", "", "", "", "", ""],
         ];
         for weekday in 1..8 {
             for hour in 8..23 {
@@ -247,17 +149,17 @@ impl From<&HashMap<String, Class>> for Schedule {
                             && slot.start / 100 <= hour
                             && slot.finish / 100 > hour
                         {
-                            arr[(hour - 8) as usize][(weekday - 1) as usize] = code.clone();
+                            table[(hour - 8) as usize][(weekday - 1) as usize] = code;
                             break;
                         }
                     }
                 }
             }
         }
-        Schedule(arr)
+        Schedule { table }
     }
 }
-impl fmt::Display for Schedule {
+impl<'a> fmt::Display for Schedule<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(
             f,
@@ -272,8 +174,8 @@ impl fmt::Display for Schedule {
                 write!(f, "+-------------+")?;
                 for weekday in 1..8 {
                     if hour > first_hour
-                        && self.0[(hour - 8) as usize][(weekday - 1) as usize]
-                            == self.0[(hour - 9) as usize][(weekday - 1) as usize]
+                        && self.table[(hour - 8) as usize][(weekday - 1) as usize]
+                            == self.table[(hour - 9) as usize][(weekday - 1) as usize]
                     {
                         write!(f, "         +")?;
                     } else {
@@ -286,11 +188,11 @@ impl fmt::Display for Schedule {
                     write!(
                         f,
                         "{: ^9}",
-                        self.0[(hour - 8) as usize][(weekday - 1) as usize]
+                        self.table[(hour - 8) as usize][(weekday - 1) as usize]
                     )?;
                     if weekday < 7
-                        && self.0[(hour - 8) as usize][(weekday - 1) as usize]
-                            == self.0[(hour - 8) as usize][(weekday) as usize]
+                        && self.table[(hour - 8) as usize][(weekday - 1) as usize]
+                            == self.table[(hour - 8) as usize][(weekday) as usize]
                     {
                         write!(f, " ")?;
                     } else {
@@ -306,10 +208,10 @@ impl fmt::Display for Schedule {
         )
     }
 }
-impl Schedule {
+impl<'a> Schedule<'a> {
     fn get_first_hour(&self) -> Option<u8> {
         for hour in 0..15 {
-            if self.0[hour].iter().any(|s| !s.is_empty()) {
+            if self.table[hour].iter().any(|s| !s.is_empty()) {
                 return Some((hour + 8) as u8);
             }
         }
@@ -317,7 +219,7 @@ impl Schedule {
     }
     fn get_last_hour(&self) -> Option<u8> {
         for hour in (0..15).rev() {
-            if self.0[hour].iter().any(|s| !s.is_empty()) {
+            if self.table[hour].iter().any(|s| !s.is_empty()) {
                 return Some((hour + 9) as u8);
             }
         }
