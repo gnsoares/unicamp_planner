@@ -14,7 +14,7 @@ struct Args {
     #[arg(long)]
     subjects_file: String,
     #[arg(long)]
-    max_cr: u8,
+    cr_max: u8,
 }
 
 pub fn parse() -> (String, Vec<Subject>, u8) {
@@ -39,5 +39,5 @@ pub fn parse() -> (String, Vec<Subject>, u8) {
         })
         .collect::<Vec<_>>();
 
-    (args.semester, subjects, args.max_cr)
+    (args.semester, subjects, args.cr_max)
 }

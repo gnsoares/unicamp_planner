@@ -14,3 +14,4 @@ clap = {version = "*", features = ["derive"]}
 time = "0.3.30"
 serde = {version = "*", features = ["derive"]}
 serde_yaml = "0.9.25"
+itertools = "0.12.0"

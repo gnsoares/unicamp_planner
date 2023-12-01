@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -80,8 +81,51 @@ pub struct Timesheet<'a> {
     pub table: HashMap<&'a str, Vec<Class>>,
 }
 
+impl<'a> Timesheet<'a> {
+    pub fn remove_duplicates(&mut self) {
+        let mut to_remove;
+        for (_, classes) in self.table.iter_mut() {
+            to_remove = vec![];
+            for idxs in (0..classes.len()).combinations(2) {
+                let i = idxs[0];
+                let j = idxs[1];
+                if to_remove.contains(&j) {
+                    continue;
+                }
+                if classes[i] == classes[j] {
+                    println!("REMOVING");
+                    to_remove.push(j);
+                }
+            }
+            to_remove.sort();
+            to_remove.reverse();
+            for i in to_remove {
+                classes.remove(i);
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Class(pub Vec<Slot>);
+
+impl PartialEq for Class {
+    fn eq(&self, other: &Self) -> bool {
+        let mut slots_self = self.0.clone();
+        let mut slots_other = other.0.clone();
+        if slots_self.len() != slots_other.len() {
+            return false;
+        }
+        slots_self.sort();
+        slots_other.sort();
+        for (si, sj) in std::iter::zip(slots_self, slots_other) {
+            if si != sj {
+                return false;
+            }
+        }
+        true
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Slot {
@@ -113,6 +157,32 @@ impl Slot {
             },
             start: duration_parsed[0][0] * 100 + duration_parsed[0][1],
             finish: duration_parsed[1][0] * 100 + duration_parsed[1][1],
+        }
+    }
+}
+
+impl PartialEq for Slot {
+    fn eq(&self, other: &Self) -> bool {
+        self.weekday == other.weekday && self.start == other.start && self.finish == other.finish
+    }
+}
+
+impl Eq for Slot {}
+
+impl PartialOrd for Slot {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Slot {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.weekday.cmp(&other.weekday) {
+            std::cmp::Ordering::Equal => match self.start.cmp(&other.start) {
+                std::cmp::Ordering::Equal => self.finish.cmp(&other.finish),
+                x => x,
+            },
+            x => x,
         }
     }
 }
