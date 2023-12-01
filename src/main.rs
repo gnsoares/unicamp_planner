@@ -5,10 +5,12 @@ mod solving;
 mod unicamp;
 
 use std::collections::HashMap;
+use std::fs::{create_dir_all, File};
+use std::io::Write;
 // use time::OffsetDateTime;
 
 use crate::scraping::build_timesheet;
-use crate::solving::solve_semester;
+use crate::solving::solve_all;
 use crate::unicamp::{Schedule, Semester, Subject, Timesheet};
 
 fn get_timesheets_and_credits(
@@ -31,19 +33,28 @@ fn get_timesheets_and_credits(
 
 fn main() {
     let data_dir: &'static str = "data";
-    let (semester_str, subjects, cr_max) = cli::parse();
+    let (semester_str, subjects, cr_max, out_dir) = cli::parse();
     // let mut semester = Semester::from(OffsetDateTime::now_utc().date());
     let mut semester = Semester::from(semester_str.as_str());
     let (ts1, ts2, cr_map) = get_timesheets_and_credits(data_dir, subjects, &semester);
-    let mut solutions = vec![];
-    solve_semester(&ts1, &mut solutions, 0, &cr_map, cr_max);
-    // dbg!(&solutions);
+    let solutions = solve_all(&ts1, &ts2, &cr_map, cr_max);
+    create_dir_all(&out_dir).unwrap();
     for (i, solution) in solutions.iter().enumerate() {
-        println!("SOLUTION {}", i + 1);
+        let mut file = File::create(out_dir.join(format!("solution_{}.txt", i + 1)))
+            .expect("Could not open solution file");
         semester = Semester::from(semester_str.as_str()).previous();
         for schedule in solution.schedules.iter() {
             semester = semester.next();
-            println!("{}\n{}", semester, Schedule::from(&schedule.table));
+            file.write_all(
+                format!(
+                    "{} ({} credits)\n{}",
+                    semester,
+                    schedule.cr_count,
+                    Schedule::from(&schedule.table)
+                )
+                .as_bytes(),
+            )
+            .expect("Error while writing solution to file");
         }
     }
 }

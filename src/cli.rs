@@ -1,11 +1,10 @@
 use clap::Parser;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::unicamp::Subject;
 
-/// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -17,7 +16,7 @@ struct Args {
     cr_max: u8,
 }
 
-pub fn parse() -> (String, Vec<Subject>, u8) {
+pub fn parse() -> (String, Vec<Subject>, u8, PathBuf) {
     let args = Args::parse();
     let path = Path::new(args.subjects_file.as_str());
 
@@ -39,5 +38,9 @@ pub fn parse() -> (String, Vec<Subject>, u8) {
         })
         .collect::<Vec<_>>();
 
-    (args.semester, subjects, args.cr_max)
+    let out_dir = Path::new("data")
+        .join("solutions")
+        .join(Path::new(args.subjects_file.as_str()).file_stem().unwrap());
+
+    (args.semester, subjects, args.cr_max, out_dir)
 }

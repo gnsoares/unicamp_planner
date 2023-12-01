@@ -93,7 +93,6 @@ impl<'a> Timesheet<'a> {
                     continue;
                 }
                 if classes[i] == classes[j] {
-                    println!("REMOVING");
                     to_remove.push(j);
                 }
             }

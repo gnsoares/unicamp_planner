@@ -4,7 +4,6 @@ use std::collections::HashMap;
 #[derive(Clone, Debug)]
 pub struct Schedule<'a> {
     pub table: HashMap<&'a str, Class>,
-    pub impossible: Vec<&'a str>,
     pub finished: bool,
     pub cr_count: u8,
 }
@@ -12,41 +11,60 @@ pub struct Schedule<'a> {
 #[derive(Clone, Debug)]
 pub struct Solution<'a> {
     pub schedules: Vec<Schedule<'a>>,
-    // pub satisfied: Vec<&'a str>,
+    pub satisfied: Vec<&'a str>,
+    pub goal: u8,
 }
 
 impl<'a> Solution<'a> {
     pub fn finished(&self) -> bool {
         self.schedules.iter().all(|sc| sc.finished)
     }
-    pub fn satisfied(&self) -> Vec<&'a str> {
-        let mut codes: Vec<&str> = vec![];
-        for sc in self.schedules.iter() {
-            for code in sc.table.keys() {
-                if !codes.contains(code) {
-                    codes.push(*code);
-                }
-            }
-        }
-        codes
+    pub fn solved(&self) -> bool {
+        self.satisfied.len() as u8 == self.goal
     }
 }
 
-// pub fn solve_all<'a>(
-//     ts1: &Timesheet<'a>,
-//     ts2: &Timesheet<'a>,
-//     cr_map: &HashMap<&'a str, u8>,
-//     cr_max: u8,
-//     ignore: Vec<&'a str>,
-// ) -> Vec<Solution<'a>> {
-// }
-
-pub fn solve_semester<'a>(
-    ts: &Timesheet<'a>,
-    solutions: &mut Vec<Solution<'a>>,
-    schedule_idx: usize,
+pub fn solve_all<'a>(
+    ts1: &Timesheet<'a>,
+    ts2: &Timesheet<'a>,
     cr_map: &HashMap<&'a str, u8>,
     cr_max: u8,
+) -> Vec<Solution<'a>> {
+    let mut solutions: Vec<Solution<'_>> = vec![];
+    let mut subjects = vec![];
+    for ts in [ts1, ts2] {
+        for subject in ts.table.keys() {
+            if !subjects.contains(subject) {
+                subjects.push(*subject);
+            }
+        }
+    }
+    let mut schedule_idx = 0;
+    loop {
+        let in_progress = solutions
+            .iter()
+            .filter(|sol| !sol.solved())
+            .collect::<Vec<_>>();
+        if !solutions.is_empty() && in_progress.is_empty() {
+            break;
+        }
+        if schedule_idx % 2 == 0 {
+            solve_semester(ts1, &mut solutions, &subjects, cr_map, cr_max, schedule_idx);
+        } else {
+            solve_semester(ts2, &mut solutions, &subjects, cr_map, cr_max, schedule_idx);
+        }
+        schedule_idx += 1;
+    }
+    solutions
+}
+
+fn solve_semester<'a>(
+    ts: &Timesheet<'a>,
+    solutions: &mut Vec<Solution<'a>>,
+    subjects: &Vec<&'a str>,
+    cr_map: &HashMap<&'a str, u8>,
+    cr_max: u8,
+    schedule_idx: usize,
 ) {
     if solutions.is_empty() {
         let fsub = get_first_subject(ts).unwrap();
@@ -54,17 +72,18 @@ pub fn solve_semester<'a>(
             solutions.push(Solution {
                 schedules: vec![Schedule {
                     table: HashMap::from([(fsub, c.clone())]),
-                    impossible: vec![fsub],
                     cr_count: *cr_map.get(fsub).unwrap(),
                     finished: false,
                 }],
+                satisfied: vec![fsub],
+                goal: subjects.len() as u8,
             });
+            println!("New solution spawned (1 satisfied)");
         }
     } else if solutions[0].schedules.len() == schedule_idx {
         for sol in solutions.iter_mut() {
             let schedule = Schedule {
                 table: HashMap::new(),
-                impossible: sol.satisfied(),
                 cr_count: 0,
                 finished: false,
             };
@@ -72,12 +91,20 @@ pub fn solve_semester<'a>(
         }
     }
     if solutions.iter().all(|sol| sol.finished()) {
+        println!(
+            "All solutions finished semester {}. {}/{} solved.",
+            schedule_idx + 1,
+            solutions.iter().filter(|sol| sol.solved()).count(),
+            solutions.len()
+        );
         return;
     }
     let mut copies = vec![];
     for sol in solutions.iter_mut().filter(|s| !s.finished()) {
         let sc = &mut sol.schedules[schedule_idx];
-        if let Some(subject) = get_next_subject(ts, &sc.table, cr_map, sc.cr_count, cr_max) {
+        if let Some(subject) =
+            get_next_subject(ts, &sol.satisfied, &sc.table, cr_map, sc.cr_count, cr_max)
+        {
             let classes = ts
                 .table
                 .get(subject)
@@ -85,6 +112,7 @@ pub fn solve_semester<'a>(
                 .iter()
                 .filter(|c| c.0.iter().all(|slot| !does_slot_conflict(slot, &sc.table)))
                 .collect::<Vec<_>>();
+            sol.satisfied.push(subject);
             sc.cr_count += cr_map.get(subject).unwrap();
             sc.table.insert(subject, classes[0].clone());
             for c in classes.iter().skip(1) {
@@ -98,9 +126,10 @@ pub fn solve_semester<'a>(
         }
     }
     for copy in copies {
+        println!("New solution spawned ({} satisfied)", copy.satisfied.len());
         solutions.push(copy);
     }
-    solve_semester(ts, solutions, schedule_idx, cr_map, cr_max);
+    solve_semester(ts, solutions, subjects, cr_map, cr_max, schedule_idx);
 }
 
 // pub fn solve_greedy<'a>(
@@ -175,6 +204,7 @@ fn get_first_subject<'a>(ts: &Timesheet<'a>) -> Option<&'a str> {
 
 fn get_next_subject<'a>(
     ts: &Timesheet<'a>,
+    satisfied: &[&'a str],
     current: &HashMap<&'a str, Class>,
     cr_map: &HashMap<&'a str, u8>,
     cr_count: u8,
@@ -190,7 +220,8 @@ fn get_next_subject<'a>(
             .iter()
             .filter(|c| c.0.iter().all(|slot| !does_slot_conflict(slot, current)))
             .collect::<Vec<_>>();
-        if classes_filt.is_empty() || current.contains_key(*subject) {
+        if classes_filt.is_empty() || current.contains_key(*subject) || satisfied.contains(subject)
+        {
             continue;
         }
         if classes_filt.len() < min_values {
