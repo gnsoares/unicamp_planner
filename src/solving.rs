@@ -1,21 +1,23 @@
+use itertools::Itertools;
+
 use crate::unicamp::{Class, Slot, Timesheet};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
-pub struct Schedule<'a> {
+struct ScheduleInProgress<'a> {
     pub table: HashMap<&'a str, Class>,
     pub finished: bool,
     pub cr_count: u8,
 }
 
 #[derive(Clone, Debug)]
-pub struct Solution<'a> {
-    pub schedules: Vec<Schedule<'a>>,
+struct SolutionInProgress<'a> {
+    pub schedules: Vec<ScheduleInProgress<'a>>,
     pub satisfied: Vec<&'a str>,
     pub goal: u8,
 }
 
-impl<'a> Solution<'a> {
+impl<'a> SolutionInProgress<'a> {
     pub fn finished(&self) -> bool {
         self.schedules.iter().all(|sc| sc.finished)
     }
@@ -24,13 +26,26 @@ impl<'a> Solution<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Schedule<'a> {
+    pub table: HashMap<&'a str, Class>,
+    pub cr_count: u8,
+    pub score: f32,
+}
+
+#[derive(Clone, Debug)]
+pub struct Solution<'a> {
+    pub schedules: Vec<Schedule<'a>>,
+    pub score: f32,
+}
+
 pub fn solve_all<'a>(
     ts1: &Timesheet<'a>,
     ts2: &Timesheet<'a>,
     cr_map: &HashMap<&'a str, u8>,
     cr_max: u8,
 ) -> Vec<Solution<'a>> {
-    let mut solutions: Vec<Solution<'_>> = vec![];
+    let mut solutions: Vec<SolutionInProgress<'_>> = vec![];
     let mut subjects = vec![];
     for ts in [ts1, ts2] {
         for subject in ts.table.keys() {
@@ -55,12 +70,31 @@ pub fn solve_all<'a>(
         }
         schedule_idx += 1;
     }
+    let mut solutions = solutions
+        .iter()
+        .map(|sol| Solution {
+            schedules: sol
+                .schedules
+                .iter()
+                .map(|sc| Schedule {
+                    table: sc.table.to_owned(),
+                    score: evaluate_solution_semester(sc),
+                    cr_count: sc.cr_count,
+                })
+                .collect_vec(),
+            score: 0f32,
+        })
+        .collect_vec();
+    for sol in solutions.iter_mut() {
+        sol.score =
+            sol.schedules.iter().map(|sc| sc.score).sum::<f32>() / sol.schedules.len() as f32;
+    }
     solutions
 }
 
 fn solve_semester<'a>(
     ts: &Timesheet<'a>,
-    solutions: &mut Vec<Solution<'a>>,
+    solutions: &mut Vec<SolutionInProgress<'a>>,
     subjects: &Vec<&'a str>,
     cr_map: &HashMap<&'a str, u8>,
     cr_max: u8,
@@ -69,8 +103,8 @@ fn solve_semester<'a>(
     if solutions.is_empty() {
         let fsub = get_first_subject(ts).unwrap();
         for c in ts.table.get(fsub).unwrap() {
-            solutions.push(Solution {
-                schedules: vec![Schedule {
+            solutions.push(SolutionInProgress {
+                schedules: vec![ScheduleInProgress {
                     table: HashMap::from([(fsub, c.clone())]),
                     cr_count: *cr_map.get(fsub).unwrap(),
                     finished: false,
@@ -82,7 +116,7 @@ fn solve_semester<'a>(
         }
     } else if solutions[0].schedules.len() == schedule_idx {
         for sol in solutions.iter_mut() {
-            let schedule = Schedule {
+            let schedule = ScheduleInProgress {
                 table: HashMap::new(),
                 cr_count: 0,
                 finished: false,
@@ -138,7 +172,7 @@ fn solve_semester<'a>(
 //     cr_map: &HashMap<&'a str, u8>,
 //     cr_max: u8,
 //     ignore: Vec<&'a str>,
-// ) -> Solution<'a> {
+// ) -> SolutionInProgress<'a> {
 //     let mut cr_count = 0;
 //     let ts = ts1.clone();
 //     let mut solution = HashMap::new();
@@ -173,14 +207,14 @@ fn solve_semester<'a>(
 //         .collect::<Vec<_>>()
 //         .is_empty();
 //     if finished {
-//         return Solution {
+//         return SolutionInProgress {
 //             schedules: vec![solution],
 //         };
 //     }
-//     let mut semesters = vec![solution];
-//     semesters.extend(solve_greedy(ts2, ts1, cr_map, cr_max, satisfied).schedules);
-//     Solution {
-//         schedules: semesters,
+//     let mut schedules = vec![solution];
+//     schedules.extend(solve_greedy(ts2, ts1, cr_map, cr_max, satisfied).schedules);
+//     SolutionInProgress {
+//         schedules: schedules,
 //     }
 // }
 
@@ -247,4 +281,33 @@ fn does_slot_conflict(slot: &Slot, current: &HashMap<&str, Class>) -> bool {
         }
     }
     false
+}
+
+fn evaluate_solution_semester(semester: &ScheduleInProgress) -> f32 {
+    let mut points = vec![];
+    for (_, cl) in semester.table.iter() {
+        for sl in cl.0.iter() {
+            for i in (sl.start / 100)..(sl.finish / 100) {
+                points.push((sl.weekday as f32, i as f32));
+            }
+        }
+    }
+    let centroid = points.iter().fold((0f32, 0f32), |sum, (x, y)| {
+        (
+            sum.0 + x / points.len() as f32,
+            sum.1 + y / points.len() as f32,
+        )
+    });
+    let score = (points.len() as f32)
+        / points
+            .iter()
+            .fold(0f32, |sum, (x, y)| {
+                sum + ((centroid.0 - x).powf(2f32) + (centroid.1 - y).powf(2f32)).sqrt()
+                    / points.len() as f32
+            })
+            .powf(2f32);
+    if score.is_finite() {
+        return score;
+    }
+    0f32
 }

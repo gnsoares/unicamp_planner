@@ -28,7 +28,7 @@ pub fn parse() -> (String, Vec<Subject>, u8, PathBuf) {
 
     let subjects = text
         .split('\n')
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty() && !s.starts_with('#'))
         .map(|subject| {
             let mut fc = subject.split(':').take(2).map(|x| x.to_string());
             Subject {
